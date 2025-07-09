@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hacker Tic-Tac-Toe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Source Code Pro', monospace;
+            background-color: #000;
+            color: #0f0;
+            overflow: hidden;
+        }
+        
+        .matrix-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.3;
+        }
+        
+        .glow {
+            text-shadow: 0 0 5px #0f0, 0 0 10px #0f0;
+        }
+        
+        .cell-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .cell-hover:hover {
+            box-shadow: 0 0 15px #0f0;
+            transform: scale(1.05);
+        }
+        
+        .terminal {
+            border: 1px solid #0f0;
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+            background-color: rgba(0, 20, 0, 0.7);
+        }
+        
+        .scanline {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(0, 255, 0, 0.1) 0%,
+                rgba(0, 255, 0, 0) 10%
+            );
+            background-size: 100% 8px;
+            pointer-events: none;
+            z-index: 10;
+            animation: scanline 8s linear infinite;
+        }
+        
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        
+        .blink {
+            animation: blink 1s step-end infinite;
+        }
+        
+        @keyframes blink {
+            from, to { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        
+        .x-symbol {
+            color: #ff5555;
+            text-shadow: 0 0 10px #ff0000;
+        }
+        
+        .o-symbol {
+            color: #55ffff;
+            text-shadow: 0 0 10px #00ffff;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen">
+    <!-- Matrix background effect -->
+    <canvas id="matrix" class="matrix-bg"></canvas>
+    
+    <!-- Scanline effect -->
+    <div class="scanline"></div>
+    
+    <div class="container mx-auto px-4 terminal p-8 rounded-lg relative">
+        <h1 class="text-4xl font-bold text-center mb-6 glow">
+            >_ TIC-TAC-TOE<span class="blink">_</span>
+        </h1>
+        
+        <div class="text-center mb-6">
+            <div id="status" class="text-xl font-semibold mb-4 glow">
+                > INITIALIZING...<br>
+                > PLAYER X'S TURN<span class="blink">_</span>
+            </div>
+            <button id="reset" class="bg-black hover:bg-green-900 text-green-400 font-bold py-2 px-4 rounded border border-green-500 glow hover:glow-lg transition-all duration-300">
+                [ RESET SYSTEM ]
+            </button>
+        </div>
+        
+        <div class="grid grid-cols-3 gap-3 max-w-xs mx-auto">
+            <!-- Game board will be generated here -->
+        </div>
+        
+        <div class="mt-6 text-sm text-green-400 text-center">
+            <div>> SYSTEM STATUS: <span id="sys-status" class="text-green-300">OPERATIONAL</span></div>
+            <div class="mt-2">> VERSION 1.337</div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Matrix background effect
+            const canvas = document.getElementById('matrix');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            const katakana = 'アァカサタナハマヤャラワガザダバパイィキシチニヒミリヰギジヂビピウゥクスツヌフムユュルグズブヅプエェケセテネヘメレヱゲゼデベペオォコソトノホモヨョロヲゴゾドボポヴッン';
+            const latin = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const nums = '0123456789';
+            const symbols = '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~';
+            
+            const alphabet = katakana + latin + nums + symbols;
+            
+            const fontSize = 16;
+            const columns = canvas.width / fontSize;
+            
+            const rainDrops = [];
+            
+            for (let x = 0; x < columns; x++) {
+                rainDrops[x] = 1;
+            }
+            
+            const drawMatrix = () => {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#0f0';
+                ctx.font = fontSize + 'px monospace';
+                
+                for (let i = 0; i < rainDrops.length; i++) {
+                    const text = alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+                    ctx.fillText(text, i * fontSize, rainDrops[i] * fontSize);
+                    
+                    if (rainDrops[i] * fontSize > canvas.height && Math.random() > 0.975) {
+                        rainDrops[i] = 0;
+                    }
+                    rainDrops[i]++;
+                }
+            };
+            
+            setInterval(drawMatrix, 30);
+            
+            // Game logic
+            const board = document.querySelector('.grid');
+            const statusDisplay = document.getElementById('status');
+            const sysStatusDisplay = document.getElementById('sys-status');
+            const resetButton = document.getElementById('reset');
+            
+            let gameState = ['', '', '', '', '', '', '', '', ''];
+            let currentPlayer = 'X';
+            let gameActive = true;
+            
+            const winningConditions = [
+                [0, 1, 2], [3, 4, 5], [6, 7, 8], // rows
+                [0, 3, 6], [1, 4, 7], [2, 5, 8], // columns
+                [0, 4, 8], [2, 4, 6]             // diagonals
+            ];
+            
+            // Create the game board
+            function initializeBoard() {
+                board.innerHTML = '';
+                gameState.forEach((cell, index) => {
+                    const cellElement = document.createElement('div');
+                    cellElement.classList.add(
+                        'w-24', 'h-24', 'flex', 'items-center', 'justify-center',
+                        'text-4xl', 'font-bold', 'bg-black', 'rounded',
+                        'border', 'border-green-500', 'cursor-pointer',
+                        'cell-hover', 'glow'
+                    );
+                    cellElement.setAttribute('data-index', index);
+                    cellElement.textContent = cell;
+                    cellElement.addEventListener('click', handleCellClick);
+                    board.appendChild(cellElement);
+                });
+                
+                // System message
+                typeWriter("> SYSTEM INITIALIZED\n> READY FOR INPUT", statusDisplay);
+                sysStatusDisplay.textContent = "OPERATIONAL";
+                sysStatusDisplay.className = "text-green-300";
+            }
+            
+            // Typewriter effect
+            function typeWriter(text, element, speed = 50) {
+                let i = 0;
+                element.textContent = '';
+                
+                function typing() {
+                    if (i < text.length) {
+                        element.textContent += text.charAt(i);
+                        i++;
+                        setTimeout(typing, speed);
+                    }
+                }
+                
+                typing();
+            }
+            
+            // Handle cell click
+            function handleCellClick(e) {
+                if (!gameActive) {
+                    typeWriter("> SYSTEM ERROR: GAME TERMINATED\n> PRESS [RESET SYSTEM] TO CONTINUE", statusDisplay);
+                    sysStatusDisplay.textContent = "ERROR";
+                    sysStatusDisplay.className = "text-red-500";
+                    return;
+                }
+                
+                const clickedCell = e.target;
+                const clickedCellIndex = parseInt(clickedCell.getAttribute('data-index'));
+                
+                if (gameState[clickedCellIndex] !== '') {
+                    typeWriter("> INVALID MOVE DETECTED\n> TRY ANOTHER CELL", statusDisplay);
+                    return;
+                }
+                
+                gameState[clickedCellIndex] = currentPlayer;
+                
+                // Add appropriate class based on player
+                if (currentPlayer === 'X') {
+                    clickedCell.classList.add('x-symbol');
+                    clickedCell.classList.remove('o-symbol', 'text-blue-400');
+                } else {
+                    clickedCell.classList.add('o-symbol');
+                    clickedCell.classList.remove('x-symbol', 'text-red-400');
+                }
+                
+                clickedCell.textContent = currentPlayer;
+                
+                // System message
+                typeWriter(`> PLAYER ${currentPlayer} MOVE REGISTERED\n> ANALYZING...`, statusDisplay);
+                
+                setTimeout(() => {
+                    checkResult();
+                }, 800);
+            }
+            
+            // Check for win or draw
+            function checkResult() {
+                let roundWon = false;
+                
+                for (let i = 0; i < winningConditions.length; i++) {
+                    const [a, b, c] = winningConditions[i];
+                    if (gameState[a] === '' || gameState[b] === '' || gameState[c] === '') continue;
+                    
+                    if (gameState[a] === gameState[b] && gameState[b] === gameState[c]) {
+                        roundWon = true;
+                        break;
+                    }
+                }
+                
+                if (roundWon) {
+                    typeWriter(`> PLAYER ${currentPlayer} VICTORY DETECTED\n> SYSTEM SHUTDOWN INITIATED`, statusDisplay);
+                    sysStatusDisplay.textContent = "SHUTTING DOWN";
+                    sysStatusDisplay.className = "text-yellow-300";
+                    gameActive = false;
+                    
+                    // Highlight winning cells
+                    return;
+                }
+                
+                if (!gameState.includes('')) {
+                    typeWriter("> STALEMATE DETECTED\n> NO WINNER DECLARED", statusDisplay);
+                    sysStatusDisplay.textContent = "STANDBY";
+                    sysStatusDisplay.className = "text-yellow-500";
+                    gameActive = false;
+                    return;
+                }
+                
+                currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+                typeWriter(`> PLAYER ${currentPlayer} TURN INITIATED\n> AWAITING INPUT`, statusDisplay);
+                sysStatusDisplay.textContent = "OPERATIONAL";
+                sysStatusDisplay.className = "text-green-300";
+            }
+            
+            // Reset game
+            function resetGame() {
+                typeWriter("> SYSTEM REBOOT INITIATED\n> RESETTING PARAMETERS...", statusDisplay);
+                sysStatusDisplay.textContent = "REBOOTING";
+                sysStatusDisplay.className = "text-blue-300";
+                
+                setTimeout(() => {
+                    gameState = ['', '', '', '', '', '', '', '', ''];
+                    gameActive = true;
+                    currentPlayer = 'X';
+                    initializeBoard();
+                }, 1000);
+            }
+            
+            // Event listeners
+            resetButton.addEventListener('click', resetGame);
+            
+            // Initialize the game
+            initializeBoard();
+            
+            // Window resize handler for matrix background
+            window.addEventListener('resize', () => {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            });
+        });
+    </script>
+</body>
+</html>
